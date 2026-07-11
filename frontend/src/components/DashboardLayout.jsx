@@ -1,15 +1,21 @@
 "use client";
 
 import React, { useState } from "react";
-import { Home, AlertTriangle, ClipboardList, Briefcase, BarChart3 } from "lucide-react";
+import { Home, AlertTriangle, ClipboardList, Briefcase, BarChart3, LogOut } from "lucide-react";
+import { signOut } from "firebase/auth";
+import { auth } from "../../firebase/firebase.init";
 import HomeView from "./HomeView";
 import AlertView from "./AlertView";
 import HistoryView from "./HistoryView";
 import CaseView from "./CaseView";
 import AnalyticsView from "./AnalyticsView";
 
-export default function DashboardLayout() {
+export default function DashboardLayout({ userProfile }) {
   const [activeTab, setActiveTab] = useState("Home");
+
+  const handleLogout = () => {
+    signOut(auth).catch(err => console.error("Sign out error", err));
+  };
 
   // Navigation tabs
   const navigationItems = [
@@ -86,10 +92,22 @@ export default function DashboardLayout() {
             </h2>
           </div>
           <div className="flex items-center gap-4">
-            <div className="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center font-bold text-xs text-secondary">
-              FO
+            <div className="flex flex-col text-right">
+              <span className="text-xs font-bold text-heading">{userProfile.name}</span>
+              <span className="text-[10px] text-muted-custom font-medium">
+                {userProfile.district}, {userProfile.division} • {userProfile.language}
+              </span>
             </div>
-            <span className="text-xs font-semibold text-muted-custom">Field Officer Dashboard</span>
+            <div className="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center font-bold text-xs text-secondary">
+              {userProfile.name.charAt(0).toUpperCase()}
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-error-custom bg-error-custom/10 hover:bg-error-custom/20 transition-all border border-error-custom/25 cursor-pointer ml-2"
+            >
+              <LogOut size={14} />
+              Logout
+            </button>
           </div>
         </header>
 
