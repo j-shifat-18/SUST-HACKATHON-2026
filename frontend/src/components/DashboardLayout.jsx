@@ -92,14 +92,14 @@ export default function DashboardLayout({ userProfile }) {
             </h2>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex flex-col text-right">
-              <span className="text-xs font-bold text-heading">{userProfile.name}</span>
-              <span className="text-[10px] text-muted-custom font-medium">
-                {userProfile.district}, {userProfile.division} • {userProfile.language}
-              </span>
-            </div>
             <div className="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center font-bold text-xs text-secondary">
               {userProfile.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-bold text-heading">{userProfile.name}</span>
+              <span className="text-[10px] text-muted-custom font-medium">
+                {userProfile.district}, {userProfile.division}
+              </span>
             </div>
             <button
               onClick={handleLogout}

@@ -6,7 +6,7 @@ import { auth } from "../../firebase/firebase.init";
 import { AlertCircle, CheckCircle } from "lucide-react";
 
 export default function LoginView({ onLoginSuccess }) {
-  const [authMode, setAuthMode] = useState("signin"); // "signin" or "register"
+  const [authMode, setAuthMode] = useState("signin");
   const [formData, setFormData] = useState({
     name: "",
     phone: "+880",
@@ -49,9 +49,7 @@ export default function LoginView({ onLoginSuccess }) {
       if (!window.recaptchaVerifier) {
         window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
           size: "invisible",
-          callback: (response) => {
-            // reCAPTCHA solved
-          }
+          callback: (response) => {}
         });
       }
     } catch (err) {
@@ -207,7 +205,7 @@ export default function LoginView({ onLoginSuccess }) {
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h1 className="text-4xl font-extrabold tracking-wider text-secondary">
+        <h1 className="text-4xl font-extrabold tracking-wider">
           CashScope
         </h1>
         <p className="mt-2 text-sm text-muted-custom">
