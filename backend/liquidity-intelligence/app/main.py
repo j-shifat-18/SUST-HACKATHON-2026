@@ -1,0 +1,76 @@
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.config import get_settings
+from app.core.logging import configure_logging
+from app.middleware import (
+    RequestIDMiddleware,
+    RequestLoggingMiddleware,
+    add_exception_handlers,
+)
+from app.api.v1.routes.snapshot import router as snapshot_router
+from app.api.v1.routes.alerts import router as alerts_router
+
+settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    
+    configure_logging()
+
+    import os
+    from app.engines.context_engine import load_calendar
+    calendar_path = os.path.join(
+        os.path.dirname(__file__), "..", "data", "context_calendar.csv"
+    )
+    load_calendar(os.path.abspath(calendar_path))
+
+    yield
+
+    from app.db.session import engine
+    await engine.dispose()
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title=settings.app_name,
+        version="1.0.0",
+        description=(
+            "Decision Making Platform. "
+            "Advisory only — never executes financial transactions."
+        ),
+        docs_url="/docs",
+        redoc_url="/redoc",
+        lifespan=lifespan,
+    )
+
+    # CORS 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"] if settings.app_env == "development" else [],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    
+
+
+    prefix = settings.api_v1_prefix
+    app.include_router(snapshot_router, prefix=prefix)
+    app.include_router(alerts_router, prefix=prefix)
+
+    @app.get("/health", tags=["Health"])
+    async def health():
+        return {"status": "ok", "env": settings.app_env}
+
+    return app
+
+
+app = create_app()
