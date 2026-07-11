@@ -31,17 +31,17 @@ export default function DashboardLayout({ userProfile }) {
   const renderContent = () => {
     switch (activeTab) {
       case "Home":
-        return <HomeView />;
+        return <HomeView userProfile={userProfile} />;
       case "Alerts":
-        return <AlertView />;
+        return <AlertView userProfile={userProfile} />;
       case "Transaction History":
-        return <HistoryView />;
+        return <HistoryView userProfile={userProfile} />;
       case "Case Management":
-        return <CaseView />;
+        return <CaseView userProfile={userProfile} />;
       case "Analytics":
-        return <AnalyticsView />;
+        return <AnalyticsView userProfile={userProfile} />;
       default:
-        return <HomeView />;
+        return <HomeView userProfile={userProfile} />;
     }
   };
 

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from "../../firebase/firebase.init";
 import { AlertCircle, CheckCircle } from "lucide-react";
+import { API_BASE_URL } from "../config";
 
 export default function LoginView({ onLoginSuccess }) {
   const [authMode, setAuthMode] = useState("signin");
@@ -63,55 +64,60 @@ export default function LoginView({ onLoginSuccess }) {
     setErrorMsg("");
     setSuccessMsg("");
 
-    if (!formData.phone.trim() || formData.phone.length < 10) {
-      setErrorMsg("Please enter a valid phone number with country code.");
-      return;
-    }
-
-    // Check if phone number is already registered in local storage
-    const checkDuplicatePhone = async () => {
-      const inputDigits = formData.phone.replace(/\D/g, "");
-      if (inputDigits.length < 10) return false;
-      const inputLast10 = inputDigits.slice(-10);
-
-      try {
-        const response = await fetch(`http://localhost:8000/api/v1/users?phone=${encodeURIComponent(formData.phone)}`);
-        if (response.ok) {
-          const data = await response.json();
-          const list = Array.isArray(data) ? data : [data];
-          return list.some(u => {
-            if (u && u.phone) {
-              const storedDigits = String(u.phone).replace(/\D/g, "");
-              return storedDigits.length >= 10 && storedDigits.slice(-10) === inputLast10;
-            }
-            return false;
-          });
-        }
-      } catch (err) {
-        console.error("Duplicate check via API failed:", err);
-      }
-      return false;
-    };
-
-    if (authMode === "register") {
-      if (!formData.name.trim()) {
-        setErrorMsg("Full name is required to register.");
-        return;
-      }
-      if (!formData.district.trim()) {
-        setErrorMsg("District is required to register.");
-        return;
-      }
-      const isDuplicate = await checkDuplicatePhone();
-      if (isDuplicate) {
-        setErrorMsg("This phone number is already registered. Please Sign In instead.");
-        return;
-      }
-    }
-
-    setLoading(true);
-
     try {
+      if (!formData.phone || !formData.phone.trim() || formData.phone.length < 10) {
+        setErrorMsg("Please enter a valid phone number with country code.");
+        return;
+      }
+
+      if (authMode === "register") {
+        if (!formData.name.trim()) {
+          setErrorMsg("Full name is required to register.");
+          return;
+        }
+        if (!formData.district.trim()) {
+          setErrorMsg("District is required to register.");
+          return;
+        }
+      }
+
+      // Show immediate loading indicator
+      setLoading(true);
+
+      // Check if phone number is already registered
+      const checkDuplicatePhone = async () => {
+        try {
+          const inputDigits = formData.phone.replace(/\D/g, "");
+          if (inputDigits.length < 10) return false;
+          const inputLast10 = inputDigits.slice(-10);
+
+          const response = await fetch(`${API_BASE_URL}/api/v1/users?phone=${encodeURIComponent(formData.phone)}`);
+          if (response.ok) {
+            const data = await response.json();
+            const list = Array.isArray(data) ? data : [data];
+            return list.some(u => {
+              if (u && u.phone) {
+                const storedDigits = String(u.phone).replace(/\D/g, "");
+                return storedDigits.length >= 10 && storedDigits.slice(-10) === inputLast10;
+              }
+              return false;
+            });
+          }
+        } catch (err) {
+          console.error("Duplicate check via API failed:", err);
+        }
+        return false;
+      };
+
+      if (authMode === "register") {
+        const isDuplicate = await checkDuplicatePhone();
+        if (isDuplicate) {
+          setErrorMsg("This phone number is already registered. Please Sign In instead.");
+          setLoading(false);
+          return;
+        }
+      }
+
       initRecaptchaVerifier();
       const appVerifier = window.recaptchaVerifier;
       const result = await signInWithPhoneNumber(auth, formData.phone, appVerifier);
@@ -122,7 +128,11 @@ export default function LoginView({ onLoginSuccess }) {
       console.error("OTP send error", err);
       setErrorMsg(err.message || "Failed to send code. Verify phone number format (+8801...)");
       if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.clear();
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (recaptchaClearErr) {
+          console.error("Failed to clear recaptcha verifier:", recaptchaClearErr);
+        }
         window.recaptchaVerifier = null;
       }
     } finally {
@@ -163,7 +173,7 @@ export default function LoginView({ onLoginSuccess }) {
 
         const phoneValue = user.phoneNumber || formData.phone;
         try {
-          const response = await fetch("http://localhost:8000/api/v1/users", {
+          const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -185,7 +195,7 @@ export default function LoginView({ onLoginSuccess }) {
           console.log("Backend registration successful");
         } catch (apiErr) {
           console.error("Failed to post user metadata to backend API:", apiErr);
-          setErrorMsg("Failed to store profile details on the backend at localhost:8000. Please ensure the backend server is running.");
+          setErrorMsg("Failed to store profile details on the backend. Please ensure the backend server is running.");
           return;
         }
 
@@ -213,7 +223,7 @@ export default function LoginView({ onLoginSuccess }) {
         }
 
         try {
-          const response = await fetch(`http://localhost:8000/api/v1/users?phone=${encodeURIComponent(user.phoneNumber)}`, {
+          const response = await fetch(`${API_BASE_URL}/api/v1/users?phone=${encodeURIComponent(user.phoneNumber)}`, {
             headers: {
               "Authorization": idToken ? `Bearer ${idToken}` : ""
             }

@@ -5,6 +5,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../../firebase/firebase.init";
 import LoginView from "../components/LoginView";
 import DashboardLayout from "../components/DashboardLayout";
+import { API_BASE_URL } from "../config";
 
 export default function Home() {
   const [userProfile, setUserProfile] = useState(null);
@@ -16,7 +17,7 @@ export default function Home() {
         let profile = null;
         try {
           const idToken = await firebaseUser.getIdToken();
-          const response = await fetch(`http://localhost:8000/api/v1/users?phone=${encodeURIComponent(firebaseUser.phoneNumber)}`, {
+          const response = await fetch(`${API_BASE_URL}/api/v1/users?phone=${encodeURIComponent(firebaseUser.phoneNumber)}`, {
             headers: {
               "Authorization": `Bearer ${idToken}`
             }
