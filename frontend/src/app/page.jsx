@@ -11,11 +11,38 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        const stored = localStorage.getItem(`cashscope_profile_${firebaseUser.uid}`);
-        if (stored) {
-          setUserProfile(JSON.parse(stored));
+        let profile = null;
+        try {
+          const idToken = await firebaseUser.getIdToken();
+          const response = await fetch(`http://localhost:8000/api/v1/users?phone=${encodeURIComponent(firebaseUser.phoneNumber)}`, {
+            headers: {
+              "Authorization": `Bearer ${idToken}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const matchedUser = Array.isArray(data)
+              ? data.find(u => String(u.phone).replace(/\D/g, "").slice(-10) === String(firebaseUser.phoneNumber).replace(/\D/g, "").slice(-10))
+              : data;
+            if (matchedUser) {
+              profile = {
+                uid: firebaseUser.uid,
+                name: matchedUser.name,
+                phone: matchedUser.phone,
+                language: matchedUser.language || "English",
+                division: matchedUser.region,
+                district: matchedUser.area
+              };
+            }
+          }
+        } catch (apiErr) {
+          console.error("Failed to fetch session profile from backend:", apiErr);
+        }
+
+        if (profile) {
+          setUserProfile(profile);
         } else {
           setUserProfile({
             uid: firebaseUser.uid,

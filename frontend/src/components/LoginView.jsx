@@ -69,30 +69,26 @@ export default function LoginView({ onLoginSuccess }) {
     }
 
     // Check if phone number is already registered in local storage
-    const checkDuplicatePhone = () => {
+    const checkDuplicatePhone = async () => {
       const inputDigits = formData.phone.replace(/\D/g, "");
       if (inputDigits.length < 10) return false;
       const inputLast10 = inputDigits.slice(-10);
 
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith("cashscope_profile_")) {
-          try {
-            const profile = JSON.parse(localStorage.getItem(key));
-            if (profile && profile.phone) {
-              const storedDigits = String(profile.phone).replace(/\D/g, "");
-              if (storedDigits.length >= 10) {
-                const storedLast10 = storedDigits.slice(-10);
-                if (inputLast10 === storedLast10) {
-                  console.warn("Duplicate phone match found in storage:", { key, profile });
-                  return true;
-                }
-              }
+      try {
+        const response = await fetch(`http://localhost:8000/api/v1/users?phone=${encodeURIComponent(formData.phone)}`);
+        if (response.ok) {
+          const data = await response.json();
+          const list = Array.isArray(data) ? data : [data];
+          return list.some(u => {
+            if (u && u.phone) {
+              const storedDigits = String(u.phone).replace(/\D/g, "");
+              return storedDigits.length >= 10 && storedDigits.slice(-10) === inputLast10;
             }
-          } catch (e) {
-            console.error("Local storage read error", e);
-          }
+            return false;
+          });
         }
+      } catch (err) {
+        console.error("Duplicate check via API failed:", err);
       }
       return false;
     };
@@ -106,7 +102,8 @@ export default function LoginView({ onLoginSuccess }) {
         setErrorMsg("District is required to register.");
         return;
       }
-      if (checkDuplicatePhone()) {
+      const isDuplicate = await checkDuplicatePhone();
+      if (isDuplicate) {
         setErrorMsg("This phone number is already registered. Please Sign In instead.");
         return;
       }
@@ -173,6 +170,7 @@ export default function LoginView({ onLoginSuccess }) {
               "Authorization": idToken ? `Bearer ${idToken}` : ""
             },
             body: JSON.stringify({
+              
               phone: phoneValue,
               name: formData.name,
               region: formData.division,
@@ -191,7 +189,7 @@ export default function LoginView({ onLoginSuccess }) {
           return;
         }
 
-        // Registration mode: save new metadata profile
+        // Registration mode: proceed directly with userProfile in-memory state
         const userProfile = {
           uid: user.uid,
           name: formData.name,
@@ -200,23 +198,54 @@ export default function LoginView({ onLoginSuccess }) {
           division: formData.division,
           district: formData.district
         };
-        localStorage.setItem(`cashscope_profile_${user.uid}`, JSON.stringify(userProfile));
-        localStorage.setItem("cashscope_active_user_uid", user.uid);
         setSuccessMsg("Account created and verified successfully!");
         setTimeout(() => {
           onLoginSuccess(userProfile);
         }, 500);
       } else {
-        // Sign-in mode: retrieve existing metadata profile
-        const stored = localStorage.getItem(`cashscope_profile_${user.uid}`);
-        if (stored) {
-          const userProfile = JSON.parse(stored);
+        // Sign-in mode: fetch profile details from backend, fallback if not found
+        let userProfile = null;
+        let idToken = "";
+        try {
+          idToken = await user.getIdToken();
+        } catch (tokenErr) {
+          console.error("Token error:", tokenErr);
+        }
+
+        try {
+          const response = await fetch(`http://localhost:8000/api/v1/users?phone=${encodeURIComponent(user.phoneNumber)}`, {
+            headers: {
+              "Authorization": idToken ? `Bearer ${idToken}` : ""
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const matchedUser = Array.isArray(data) 
+              ? data.find(u => String(u.phone).replace(/\D/g, "").slice(-10) === String(user.phoneNumber).replace(/\D/g, "").slice(-10))
+              : data;
+              
+            if (matchedUser) {
+              userProfile = {
+                uid: user.uid,
+                name: matchedUser.name,
+                phone: matchedUser.phone,
+                language: matchedUser.language || "English",
+                division: matchedUser.region,
+                district: matchedUser.area
+              };
+            }
+          }
+        } catch (apiErr) {
+          console.error("Failed to query user profile from backend:", apiErr);
+        }
+
+        if (userProfile) {
           setSuccessMsg("Verified and logged in successfully!");
           setTimeout(() => {
             onLoginSuccess(userProfile);
           }, 500);
         } else {
-          // No profile details exist yet for this phone number: route to complete profile details
+          // No profile details found: route to complete profile details
           setSuccessMsg("OTP Verified! Complete profile details to activate dashboard.");
           setAuthMode("register");
           setOtpSent(false);
