@@ -1,4 +1,7 @@
-
+"""
+FastAPI application entrypoint.
+Mounts all routers, middleware, and startup/shutdown lifecycle hooks.
+"""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -8,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.db.session import connect_prisma, disconnect_prisma
 from app.middleware import (
     RequestIDMiddleware,
     RequestLoggingMiddleware,
@@ -21,9 +25,13 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    
+    """Startup / shutdown logic."""
     configure_logging()
 
+    # Connect Prisma client to Supabase
+    await connect_prisma()
+
+    # Load context calendar for the ContextEngine
     import os
     from app.engines.context_engine import load_calendar
     calendar_path = os.path.join(
@@ -33,8 +41,8 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    from app.db.session import engine
-    await engine.dispose()
+    # Shutdown: disconnect Prisma client
+    await disconnect_prisma()
 
 
 def create_app() -> FastAPI:
@@ -42,7 +50,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version="1.0.0",
         description=(
-            "Decision Making Platform. "
+            "MFS Super-Agent AI Decision Support Platform. "
             "Advisory only — never executes financial transactions."
         ),
         docs_url="/docs",
@@ -50,7 +58,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS 
+    # CORS (restrict in production)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"] if settings.app_env == "development" else [],
@@ -59,9 +67,14 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    
+    # Custom middleware (order matters — outermost runs first)
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(RequestIDMiddleware)
 
+    # Exception handlers
+    add_exception_handlers(app)
 
+    # Routers
     prefix = settings.api_v1_prefix
     app.include_router(snapshot_router, prefix=prefix)
     app.include_router(alerts_router, prefix=prefix)

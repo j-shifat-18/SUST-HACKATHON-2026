@@ -1,0 +1,8 @@
+date,event_name,volume_multiplier,description
+2026-01-01,New Year,1.8,New Year transactions spike
+2026-03-26,Independence Day,2.0,Independence Day remittances
+2026-04-14,Pohela Boishakh,2.5,Bengali New Year — highest cash-in day
+2026-05-01,Salary Day,3.0,Monthly salary disbursement
+2026-05-25,Eid ul-Fitr,4.0,Eid — peak MFS usage
+2026-05-26,Eid ul-Fitr +1,3.5,Post-Eid gifting
+2026-06-01,Salary Day,3.0,Monthly salary disbursement
