@@ -149,12 +149,53 @@ export default function LoginView({ onLoginSuccess }) {
       const userCredential = await confirmationResultRef.current.confirm(otp);
       const user = userCredential.user;
 
+      try {
+        const token = await user.getIdToken();
+        console.log("Firebase Access Token:", token);
+      } catch (tokenErr) {
+        console.error("Failed to retrieve ID token:", tokenErr);
+      }
+
       if (authMode === "register") {
+        let idToken = "";
+        try {
+          idToken = await user.getIdToken();
+        } catch (tokenErr) {
+          console.error("Token generation error:", tokenErr);
+        }
+
+        const phoneValue = user.phoneNumber || formData.phone;
+        try {
+          const response = await fetch("http://localhost:8000/api/v1/users", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": idToken ? `Bearer ${idToken}` : ""
+            },
+            body: JSON.stringify({
+              phone: phoneValue,
+              name: formData.name,
+              region: formData.division,
+              area: formData.district
+            })
+          });
+
+          if (!response.ok) {
+            const errBody = await response.json().catch(() => ({}));
+            throw new Error(errBody.message || `Server responded with status ${response.status}`);
+          }
+          console.log("Backend registration successful");
+        } catch (apiErr) {
+          console.error("Failed to post user metadata to backend API:", apiErr);
+          setErrorMsg("Failed to store profile details on the backend at localhost:8000. Please ensure the backend server is running.");
+          return;
+        }
+
         // Registration mode: save new metadata profile
         const userProfile = {
           uid: user.uid,
           name: formData.name,
-          phone: user.phoneNumber || formData.phone,
+          phone: phoneValue,
           language: formData.language,
           division: formData.division,
           district: formData.district
