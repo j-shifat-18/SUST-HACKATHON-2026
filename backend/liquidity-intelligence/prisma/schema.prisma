@@ -1,0 +1,203 @@
+// Prisma schema for MFS Liquidity Intelligence
+// Database: Supabase (PostgreSQL)
+// Generator: prisma-client-py (async)
+
+generator client {
+  provider                    = "prisma-client-py"
+  interface                   = "asyncio"
+  recursive_type_depth        = 5
+  enable_experimental_decimal = true
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Agent {
+  id         String   @id @default(uuid())
+  name       String   @db.VarChar(200)
+  phone      String   @unique @db.VarChar(20)
+  area       String   @db.VarChar(100)
+  region     String   @db.VarChar(100)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  transactions       Transaction[]
+  snapshots          LiquiditySnapshot[]
+  alerts             Alert[]
+  cases              Case[]
+  forecastHorizons   ForecastHorizon[]
+
+  @@map("agents")
+}
+
+model Transaction {
+  id              String    @id @default(uuid())
+  agentId         String    @map("agent_id")
+  provider        String    @db.VarChar(20)
+  transactionType String    @map("transaction_type") @db.VarChar(20)
+  amount          Decimal   @db.Decimal(18, 2)
+  timestamp       DateTime
+  area            String    @db.VarChar(100)
+  accountRef      String    @map("account_ref") @db.VarChar(100)
+  anomalyFlagId   String?   @map("anomaly_flag_id")
+  metadata        Json      @default("{}")
+
+  agent       Agent        @relation(fields: [agentId], references: [id])
+  anomalyFlag AnomalyFlag? @relation(fields: [anomalyFlagId], references: [id])
+
+  @@index([agentId])
+  @@index([provider])
+  @@index([timestamp])
+  @@map("transactions")
+}
+
+model LiquiditySnapshot {
+  id                String   @id @default(uuid())
+  agentId           String   @map("agent_id")
+  physicalCash      Decimal  @map("physical_cash") @db.Decimal(18, 2)
+  bkashBalance      Decimal  @map("bkash_balance") @db.Decimal(18, 2)
+  nagadBalance      Decimal  @map("nagad_balance") @db.Decimal(18, 2)
+  rocketBalance     Decimal  @map("rocket_balance") @db.Decimal(18, 2)
+  overallConfidence Float    @map("overall_confidence")
+  capturedAt        DateTime @default(now()) @map("captured_at")
+
+  agent Agent @relation(fields: [agentId], references: [id])
+
+  @@index([agentId])
+  @@index([capturedAt])
+  @@map("liquidity_snapshots")
+}
+
+model ForecastHorizon {
+  id                  String   @id @default(uuid())
+  agentId             String   @map("agent_id")
+  provider            String   @db.VarChar(20)
+  forecastHours       Int      @map("forecast_hours")
+  predictedBalance    Decimal  @map("predicted_balance") @db.Decimal(18, 2)
+  depletionTimeHours  Float?   @map("depletion_time_hours")
+  confidence          Float
+  modelVersion        String   @map("model_version") @db.VarChar(50)
+  generatedAt         DateTime @default(now()) @map("generated_at")
+
+  agent Agent @relation(fields: [agentId], references: [id])
+
+  @@index([agentId])
+  @@map("forecast_horizons")
+}
+
+model AnomalyFlag {
+  id                   String   @id @default(uuid())
+  transactionId        String?  @map("transaction_id")
+  transactionGroupIds  Json     @default("[]") @map("transaction_group_ids")
+  flagType             String   @map("flag_type") @db.VarChar(50)
+  severityScore        Int      @map("severity_score")
+  confidence           Float
+  evidence             Json
+  explanationEn        String   @map("explanation_en")
+  explanationBn        String   @map("explanation_bn")
+  explanationBanglish  String   @map("explanation_banglish")
+  reviewLanguage       String   @default("en") @map("review_language") @db.VarChar(20)
+  isReviewed           Boolean  @default(false) @map("is_reviewed")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  transactions Transaction[]
+
+  @@map("anomaly_flags")
+}
+
+model Alert {
+  id                 String   @id @default(uuid())
+  agentId            String   @map("agent_id")
+  alertType          String   @map("alert_type") @db.VarChar(50)
+  severity           String   @db.VarChar(20)
+  confidence         Float
+  evidence           Json
+  status             String   @default("open") @db.VarChar(20)
+  assignedToUserId   String?  @map("assigned_to_user_id")
+  anomalyFlagId      String?  @map("anomaly_flag_id")
+  forecastHorizonId  String?  @map("forecast_horizon_id")
+  notes              String   @default("")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
+
+  agent       Agent                  @relation(fields: [agentId], references: [id])
+  transitions AlertStateTransition[]
+
+  @@index([agentId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("alerts")
+}
+
+model AlertStateTransition {
+  id            String   @id @default(uuid())
+  alertId       String   @map("alert_id")
+  fromStatus    String   @map("from_status") @db.VarChar(20)
+  toStatus      String   @map("to_status") @db.VarChar(20)
+  actorUserId   String   @map("actor_user_id")
+  note          String   @default("")
+  transitionedAt DateTime @default(now()) @map("transitioned_at")
+
+  alert Alert @relation(fields: [alertId], references: [id])
+
+  @@index([alertId])
+  @@map("alert_state_transitions")
+}
+
+model Case {
+  id             String   @id @default(uuid())
+  agentId        String   @map("agent_id")
+  title          String   @db.VarChar(500)
+  alertIds       Json     @default("[]") @map("alert_ids")
+  status         String   @default("open") @db.VarChar(20)
+  resolutionNote String   @default("") @map("resolution_note")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  agent Agent @relation(fields: [agentId], references: [id])
+
+  @@index([agentId])
+  @@map("cases")
+}
+
+model DataFeedStatus {
+  id                        String    @id @default(uuid())
+  provider                  String    @unique @db.VarChar(20)
+  lastReceivedAt            DateTime? @map("last_received_at")
+  isHealthy                 Boolean   @default(true) @map("is_healthy")
+  stalenessThresholdSeconds Int       @default(300) @map("staleness_threshold_seconds")
+
+  @@map("data_feed_statuses")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  firebaseUid String   @unique @map("firebase_uid")
+  phone       String   @unique @db.VarChar(20)
+  name        String   @db.VarChar(200)
+  role        String   @db.VarChar(30)
+  region      String?  @db.VarChar(100)
+  area        String?  @db.VarChar(100)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([firebaseUid])
+  @@map("users")
+}
+
+model AgentTraceLog {
+  id            String   @id @default(uuid())
+  requestId     String   @map("request_id")
+  agentName     String   @map("agent_name") @db.VarChar(100)
+  inputSummary  String   @map("input_summary")
+  outputSummary String   @map("output_summary")
+  toolCalls     Json     @default("[]") @map("tool_calls")
+  durationMs    Int      @map("duration_ms")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([requestId])
+  @@map("agent_trace_logs")
+}
