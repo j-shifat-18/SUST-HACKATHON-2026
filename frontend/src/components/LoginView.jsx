@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from "../../firebase/firebase.init";
-import { AlertCircle, CheckCircle } from "lucide-react";
+import { AlertCircle, CheckCircle, Shield } from "lucide-react";
 
 export default function LoginView({ onLoginSuccess }) {
   const [authMode, setAuthMode] = useState("signin");
@@ -12,15 +12,13 @@ export default function LoginView({ onLoginSuccess }) {
     phone: "+880",
     language: "English",
     division: "Dhaka",
-    district: ""
+    district: "",
   });
-
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-
   const confirmationResultRef = useRef(null);
 
   useEffect(() => {
@@ -29,32 +27,22 @@ export default function LoginView({ onLoginSuccess }) {
         try {
           window.recaptchaVerifier.clear();
           window.recaptchaVerifier = null;
-        } catch (e) {
-          console.error("Recaptcha cleanup error", e);
-        }
+        } catch (e) {}
       }
     };
   }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const initRecaptchaVerifier = () => {
-    try {
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-          size: "invisible",
-          callback: (response) => {}
-        });
-      }
-    } catch (err) {
-      console.error("Recaptcha init error", err);
-      setErrorMsg("Failed to initialize safety reCAPTCHA. Please reload.");
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
+        callback: () => {},
+      });
     }
   };
 
@@ -68,31 +56,6 @@ export default function LoginView({ onLoginSuccess }) {
       return;
     }
 
-    // Check if phone number is already registered in local storage
-    const checkDuplicatePhone = async () => {
-      const inputDigits = formData.phone.replace(/\D/g, "");
-      if (inputDigits.length < 10) return false;
-      const inputLast10 = inputDigits.slice(-10);
-
-      try {
-        const response = await fetch(`http://localhost:8000/api/v1/users?phone=${encodeURIComponent(formData.phone)}`);
-        if (response.ok) {
-          const data = await response.json();
-          const list = Array.isArray(data) ? data : [data];
-          return list.some(u => {
-            if (u && u.phone) {
-              const storedDigits = String(u.phone).replace(/\D/g, "");
-              return storedDigits.length >= 10 && storedDigits.slice(-10) === inputLast10;
-            }
-            return false;
-          });
-        }
-      } catch (err) {
-        console.error("Duplicate check via API failed:", err);
-      }
-      return false;
-    };
-
     if (authMode === "register") {
       if (!formData.name.trim()) {
         setErrorMsg("Full name is required to register.");
@@ -102,24 +65,17 @@ export default function LoginView({ onLoginSuccess }) {
         setErrorMsg("District is required to register.");
         return;
       }
-      const isDuplicate = await checkDuplicatePhone();
-      if (isDuplicate) {
-        setErrorMsg("This phone number is already registered. Please Sign In instead.");
-        return;
-      }
     }
 
     setLoading(true);
-
     try {
       initRecaptchaVerifier();
       const appVerifier = window.recaptchaVerifier;
       const result = await signInWithPhoneNumber(auth, formData.phone, appVerifier);
       confirmationResultRef.current = result;
       setOtpSent(true);
-      setSuccessMsg("Verification code sent successfully to your phone!");
+      setSuccessMsg("Verification code sent successfully!");
     } catch (err) {
-      console.error("OTP send error", err);
       setErrorMsg(err.message || "Failed to send code. Verify phone number format (+8801...)");
       if (window.recaptchaVerifier) {
         window.recaptchaVerifier.clear();
@@ -141,131 +97,92 @@ export default function LoginView({ onLoginSuccess }) {
     }
 
     setLoading(true);
-
     try {
       const userCredential = await confirmationResultRef.current.confirm(otp);
       const user = userCredential.user;
 
-      try {
-        const token = await user.getIdToken();
-        console.log("Firebase Access Token:", token);
-      } catch (tokenErr) {
-        console.error("Failed to retrieve ID token:", tokenErr);
-      }
-
       if (authMode === "register") {
-        let idToken = "";
-        try {
-          idToken = await user.getIdToken();
-        } catch (tokenErr) {
-          console.error("Token generation error:", tokenErr);
-        }
-
+        const idToken = await user.getIdToken();
         const phoneValue = user.phoneNumber || formData.phone;
-        try {
-          const response = await fetch("http://localhost:8000/api/v1/users", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": idToken ? `Bearer ${idToken}` : ""
-            },
-            body: JSON.stringify({
-              
-              phone: phoneValue,
-              name: formData.name,
-              region: formData.division,
-              area: formData.district
-            })
-          });
 
-          if (!response.ok) {
-            const errBody = await response.json().catch(() => ({}));
-            throw new Error(errBody.message || `Server responded with status ${response.status}`);
-          }
-          console.log("Backend registration successful");
-        } catch (apiErr) {
-          console.error("Failed to post user metadata to backend API:", apiErr);
-          setErrorMsg("Failed to store profile details on the backend at localhost:8000. Please ensure the backend server is running.");
-          return;
-        }
+        await fetch("http://localhost:8000/api/v1/users", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            phone: phoneValue,
+            name: formData.name,
+            region: formData.division,
+            area: formData.district,
+          }),
+        });
 
-        // Registration mode: proceed directly with userProfile in-memory state
         const userProfile = {
           uid: user.uid,
           name: formData.name,
           phone: phoneValue,
           language: formData.language,
           division: formData.division,
-          district: formData.district
+          district: formData.district,
+          role: "operator",
         };
-        setSuccessMsg("Account created and verified successfully!");
-        setTimeout(() => {
-          onLoginSuccess(userProfile);
-        }, 500);
+        setSuccessMsg("Account created!");
+        setTimeout(() => onLoginSuccess(userProfile), 500);
       } else {
-        // Sign-in mode: fetch profile details from backend, fallback if not found
+        const idToken = await user.getIdToken();
         let userProfile = null;
-        let idToken = "";
-        try {
-          idToken = await user.getIdToken();
-        } catch (tokenErr) {
-          console.error("Token error:", tokenErr);
-        }
 
         try {
-          const response = await fetch(`http://localhost:8000/api/v1/users?phone=${encodeURIComponent(user.phoneNumber)}`, {
-            headers: {
-              "Authorization": idToken ? `Bearer ${idToken}` : ""
-            }
-          });
+          const response = await fetch(
+            `http://localhost:8000/api/v1/users?phone=${encodeURIComponent(user.phoneNumber)}`,
+            { headers: { Authorization: `Bearer ${idToken}` } }
+          );
           if (response.ok) {
             const data = await response.json();
-            const matchedUser = Array.isArray(data) 
-              ? data.find(u => String(u.phone).replace(/\D/g, "").slice(-10) === String(user.phoneNumber).replace(/\D/g, "").slice(-10))
+            const matchedUser = Array.isArray(data)
+              ? data.find(
+                  (u) =>
+                    String(u.phone).replace(/\D/g, "").slice(-10) ===
+                    String(user.phoneNumber).replace(/\D/g, "").slice(-10)
+                )
               : data;
-              
             if (matchedUser) {
               userProfile = {
                 uid: user.uid,
+                id: matchedUser.id,
                 name: matchedUser.name,
                 phone: matchedUser.phone,
                 language: matchedUser.language || "English",
                 division: matchedUser.region,
-                district: matchedUser.area
+                district: matchedUser.area,
+                role: matchedUser.role,
               };
             }
           }
-        } catch (apiErr) {
-          console.error("Failed to query user profile from backend:", apiErr);
-        }
+        } catch {}
 
         if (userProfile) {
-          setSuccessMsg("Verified and logged in successfully!");
-          setTimeout(() => {
-            onLoginSuccess(userProfile);
-          }, 500);
+          setSuccessMsg("Logged in!");
+          setTimeout(() => onLoginSuccess(userProfile), 500);
         } else {
-          // No profile details found: route to complete profile details
-          setSuccessMsg("OTP Verified! Complete profile details to activate dashboard.");
+          setSuccessMsg("OTP Verified! Complete your profile.");
           setAuthMode("register");
           setOtpSent(false);
           setOtp("");
-          setFormData(prev => ({
-            ...prev,
-            phone: user.phoneNumber || prev.phone
-          }));
+          setFormData((prev) => ({ ...prev, phone: user.phoneNumber || prev.phone }));
         }
       }
-    } catch (err) {
-      console.error("OTP verify error", err);
-      setErrorMsg("Invalid verification code. Please check and try again.");
+    } catch {
+      setErrorMsg("Invalid verification code. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const toggleAuthMode = () => {
-    setAuthMode(prev => (prev === "signin" ? "register" : "signin"));
+    setAuthMode((prev) => (prev === "signin" ? "register" : "signin"));
     setOtpSent(false);
     setOtp("");
     setErrorMsg("");
@@ -275,57 +192,51 @@ export default function LoginView({ onLoginSuccess }) {
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h1 className="text-4xl font-extrabold tracking-wider">
-          CashScope
-        </h1>
-        <p className="mt-2 text-sm text-muted-custom">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <Shield className="w-8 h-8 text-primary" />
+          <h1 className="text-3xl font-bold text-heading tracking-wide">CashScope</h1>
+        </div>
+        <p className="text-sm text-muted-custom">
           {authMode === "signin" ? "Sign in to your account" : "Create a new CashScope profile"}
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-surface py-8 px-4 border border-border-custom rounded-2xl shadow-lg sm:px-10">
-          
-          {/* Notifications */}
+        <div className="bg-surface py-8 px-6 border border-border-custom rounded-2xl shadow-2xl shadow-primary/5">
           {errorMsg && (
-            <div className="mb-4 p-3 bg-error-custom/10 border border-error-custom/25 rounded-lg flex items-start gap-2 text-xs text-error-custom">
+            <div className="mb-4 p-3 bg-error-custom/10 border border-error-custom/20 rounded-lg flex items-start gap-2 text-xs text-error-custom">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
           )}
-
           {successMsg && (
-            <div className="mb-4 p-3 bg-success-custom/10 border border-success-custom/25 rounded-lg flex items-start gap-2 text-xs text-success-custom">
+            <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg flex items-start gap-2 text-xs text-primary">
               <CheckCircle size={16} className="shrink-0 mt-0.5" />
               <span>{successMsg}</span>
             </div>
           )}
 
-          {/* Form */}
           {!otpSent ? (
             <form onSubmit={handleSendOtp} className="space-y-4">
-              
               {authMode === "register" && (
-                <>
-                  <div>
-                    <label className="block text-xs font-bold text-heading uppercase tracking-wide mb-1">
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      placeholder="Enter full name"
-                      className="w-full bg-background border border-border-custom text-text-main rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-secondary"
-                      disabled={loading}
-                    />
-                  </div>
-                </>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-custom uppercase tracking-wide mb-1.5">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    placeholder="Enter full name"
+                    className="w-full bg-surface-elevated border border-border-light text-heading rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
+                    disabled={loading}
+                  />
+                </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-heading uppercase tracking-wide mb-1">
+                <label className="block text-xs font-semibold text-muted-custom uppercase tracking-wide mb-1.5">
                   Phone Number
                 </label>
                 <input
@@ -333,68 +244,45 @@ export default function LoginView({ onLoginSuccess }) {
                   name="phone"
                   value={formData.phone}
                   onChange={handleInputChange}
-                  placeholder="e.g. +88017XXXXXXXX"
-                  className="w-full bg-background border border-border-custom text-text-main rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-secondary font-mono"
+                  placeholder="+88017XXXXXXXX"
+                  className="w-full bg-surface-elevated border border-border-light text-heading rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
                   disabled={loading}
                 />
               </div>
 
               {authMode === "register" && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-heading uppercase tracking-wide mb-1">
-                        Language
-                      </label>
-                      <select
-                        name="language"
-                        value={formData.language}
-                        onChange={handleInputChange}
-                        className="w-full bg-background border border-border-custom text-text-main rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-secondary"
-                        disabled={loading}
-                      >
-                        <option value="English">English</option>
-                        <option value="Bengali">Bengali (বাংলা)</option>
-                        <option value="Banglish">Both</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-heading uppercase tracking-wide mb-1">
+                      <label className="block text-xs font-semibold text-muted-custom uppercase tracking-wide mb-1.5">
                         Division
                       </label>
                       <select
                         name="division"
                         value={formData.division}
                         onChange={handleInputChange}
-                        className="w-full bg-background border border-border-custom text-text-main rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-secondary"
+                        className="w-full bg-surface-elevated border border-border-light text-heading rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary transition-all"
                         disabled={loading}
                       >
-                        <option value="Dhaka">Dhaka</option>
-                        <option value="Sylhet">Sylhet</option>
-                        <option value="Chittagong">Chittagong</option>
-                        <option value="Rajshahi">Rajshahi</option>
-                        <option value="Rangpur">Rangpur</option>
-                        <option value="Khulna">Khulna</option>
-                        <option value="Barishal">Barishal</option>
-                        <option value="Mymensingh">Mymensingh</option>
+                        {["Dhaka", "Sylhet", "Chittagong", "Rajshahi", "Rangpur", "Khulna", "Barishal", "Mymensingh"].map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
                       </select>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-heading uppercase tracking-wide mb-1">
-                      District
-                    </label>
-                    <input
-                      type="text"
-                      name="district"
-                      value={formData.district}
-                      onChange={handleInputChange}
-                      placeholder="Enter district (e.g. Sylhet)"
-                      className="w-full bg-background border border-border-custom text-text-main rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-secondary"
-                      disabled={loading}
-                    />
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-custom uppercase tracking-wide mb-1.5">
+                        District
+                      </label>
+                      <input
+                        type="text"
+                        name="district"
+                        value={formData.district}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Sylhet"
+                        className="w-full bg-surface-elevated border border-border-light text-heading rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
+                        disabled={loading}
+                      />
+                    </div>
                   </div>
                 </>
               )}
@@ -402,11 +290,9 @@ export default function LoginView({ onLoginSuccess }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-secondary hover:bg-secondary/90 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors shadow-sm focus:outline-none cursor-pointer flex justify-center items-center gap-2"
+                className="w-full bg-primary hover:bg-primary-light text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition-all shadow-lg shadow-primary/20 focus:outline-none cursor-pointer flex justify-center items-center gap-2 mt-6"
               >
-                {loading && (
-                  <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
-                )}
+                {loading && <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />}
                 {authMode === "signin" ? "Send Sign In OTP" : "Send Registration OTP"}
               </button>
 
@@ -414,18 +300,16 @@ export default function LoginView({ onLoginSuccess }) {
                 <button
                   type="button"
                   onClick={toggleAuthMode}
-                  className="text-xs font-semibold text-secondary hover:underline cursor-pointer focus:outline-none"
+                  className="text-xs font-medium text-primary hover:text-primary-light cursor-pointer transition-colors"
                 >
-                  {authMode === "signin"
-                    ? "Don't have an account? Register"
-                    : "Already registered? Sign In"}
+                  {authMode === "signin" ? "Don't have an account? Register" : "Already registered? Sign In"}
                 </button>
               </div>
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-heading uppercase tracking-wide mb-1">
+                <label className="block text-xs font-semibold text-muted-custom uppercase tracking-wide mb-1.5">
                   Verification Code (OTP)
                 </label>
                 <input
@@ -433,7 +317,7 @@ export default function LoginView({ onLoginSuccess }) {
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   placeholder="Enter 6-digit code"
-                  className="w-full bg-background border border-border-custom text-text-main rounded-lg px-3 py-2 text-sm text-center font-bold tracking-widest focus:outline-none focus:border-secondary"
+                  className="w-full bg-surface-elevated border border-border-light text-heading rounded-lg px-3 py-2.5 text-sm text-center font-bold tracking-[0.3em] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
                   disabled={loading}
                 />
               </div>
@@ -441,31 +325,23 @@ export default function LoginView({ onLoginSuccess }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-primary hover:bg-primary/90 text-heading font-bold py-2.5 px-4 rounded-lg text-sm transition-colors shadow-sm focus:outline-none cursor-pointer flex justify-center items-center gap-2"
+                className="w-full bg-primary hover:bg-primary-light text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition-all shadow-lg shadow-primary/20 focus:outline-none cursor-pointer flex justify-center items-center gap-2"
               >
-                {loading && (
-                  <span className="w-4 h-4 rounded-full border-2 border-heading/30 border-t-heading animate-spin"></span>
-                )}
+                {loading && <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />}
                 {authMode === "signin" ? "Verify & Sign In" : "Verify & Register"}
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setOtpSent(false);
-                  setOtp("");
-                  setErrorMsg("");
-                  setSuccessMsg("");
-                }}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-muted-custom py-2 rounded-lg text-xs font-semibold transition-colors focus:outline-none"
+                onClick={() => { setOtpSent(false); setOtp(""); setErrorMsg(""); setSuccessMsg(""); }}
+                className="w-full bg-surface-elevated hover:bg-surface-hover text-muted-custom py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer"
               >
-                Back to credentials
+                ← Back
               </button>
             </form>
           )}
 
-          <div id="recaptcha-container" className="mt-2"></div>
-
+          <div id="recaptcha-container" className="mt-2" />
         </div>
       </div>
     </div>

@@ -19,6 +19,10 @@ from app.middleware import (
 )
 from app.api.v1.routes.snapshot import router as snapshot_router
 from app.api.v1.routes.alerts import router as alerts_router
+from app.api.v1.routes.users import router as users_router
+from app.api.v1.routes.alert_advisory import router as advisory_router
+from app.api.v1.routes.transactions import router as transactions_router
+from app.api.v1.routes.cases import router as cases_router
 
 settings = get_settings()
 
@@ -58,18 +62,18 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS (restrict in production)
+    # Custom middleware (order matters — added last = outermost = executes first)
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(RequestIDMiddleware)
+
+    # CORS must be outermost to handle error responses too
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.app_env == "development" else [],
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # Custom middleware (order matters — outermost runs first)
-    app.add_middleware(RequestLoggingMiddleware)
-    app.add_middleware(RequestIDMiddleware)
 
     # Exception handlers
     add_exception_handlers(app)
@@ -78,6 +82,10 @@ def create_app() -> FastAPI:
     prefix = settings.api_v1_prefix
     app.include_router(snapshot_router, prefix=prefix)
     app.include_router(alerts_router, prefix=prefix)
+    app.include_router(users_router, prefix=prefix)
+    app.include_router(advisory_router, prefix=prefix)
+    app.include_router(transactions_router, prefix=prefix)
+    app.include_router(cases_router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     async def health():

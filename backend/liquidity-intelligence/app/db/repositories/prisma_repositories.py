@@ -462,12 +462,31 @@ class PrismaAlertRepository(IAlertRepository):
         return [_alert(r) for r in rows]
 
     async def save(self, alert: Alert) -> Alert:
-        data = {
-            "id": alert.id, "agentId": alert.agent_id,
+        from prisma import Json as PrismaJson
+        evidence_val = PrismaJson(alert.evidence) if isinstance(alert.evidence, dict) else alert.evidence
+        
+        # For update, we just need the changed fields
+        update_data = {
             "alertType": alert.alert_type.value,
             "severity": alert.severity.value,
             "confidence": alert.confidence.value,
-            "evidence": alert.evidence,
+            "evidence": evidence_val,
+            "status": alert.status.value,
+            "assignedToUserId": alert.assigned_to_user_id,
+            "anomalyFlagId": alert.anomaly_flag_id,
+            "forecastHorizonId": alert.forecast_horizon_id,
+            "notes": alert.notes,
+            "updatedAt": alert.updated_at,
+        }
+        
+        # For create, use relation connect
+        create_data = {
+            "id": alert.id,
+            "agent": {"connect": {"id": alert.agent_id}},
+            "alertType": alert.alert_type.value,
+            "severity": alert.severity.value,
+            "confidence": alert.confidence.value,
+            "evidence": evidence_val,
             "status": alert.status.value,
             "assignedToUserId": alert.assigned_to_user_id,
             "anomalyFlagId": alert.anomaly_flag_id,
@@ -476,9 +495,10 @@ class PrismaAlertRepository(IAlertRepository):
             "createdAt": alert.created_at,
             "updatedAt": alert.updated_at,
         }
+        
         await self._db.alert.upsert(
             where={"id": alert.id},
-            data={"create": data, "update": {k: v for k, v in data.items() if k != "id"}},
+            data={"create": create_data, "update": update_data},
         )
         return alert
 

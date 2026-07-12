@@ -178,10 +178,11 @@ model User {
   firebaseUid String   @unique @map("firebase_uid")
   phone       String   @unique @db.VarChar(20)
   name        String   @db.VarChar(200)
+  role        String?   @default("operator") @db.VarChar(30)
   region      String?  @db.VarChar(100)
   area        String?  @db.VarChar(100)
-  language    String   @db.VarChar(100)
-  isActive    Boolean  @default(true) @map("is_active")
+  language    String   @default("en") @db.VarChar(100)
+  isActive    Boolean?  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@index([firebaseUid])

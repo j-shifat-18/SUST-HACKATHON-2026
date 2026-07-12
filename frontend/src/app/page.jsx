@@ -11,29 +11,39 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth) {
+      setAuthLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         let profile = null;
         try {
           const idToken = await firebaseUser.getIdToken();
-          const response = await fetch(`http://localhost:8000/api/v1/users?phone=${encodeURIComponent(firebaseUser.phoneNumber)}`, {
-            headers: {
-              "Authorization": `Bearer ${idToken}`
-            }
-          });
+          const response = await fetch(
+            `http://localhost:8000/api/v1/users?phone=${encodeURIComponent(firebaseUser.phoneNumber)}`,
+            { headers: { Authorization: `Bearer ${idToken}` } }
+          );
           if (response.ok) {
             const data = await response.json();
             const matchedUser = Array.isArray(data)
-              ? data.find(u => String(u.phone).replace(/\D/g, "").slice(-10) === String(firebaseUser.phoneNumber).replace(/\D/g, "").slice(-10))
+              ? data.find(
+                  (u) =>
+                    String(u.phone).replace(/\D/g, "").slice(-10) ===
+                    String(firebaseUser.phoneNumber).replace(/\D/g, "").slice(-10)
+                )
               : data;
             if (matchedUser) {
               profile = {
                 uid: firebaseUser.uid,
+                id: matchedUser.id,
                 name: matchedUser.name,
                 phone: matchedUser.phone,
                 language: matchedUser.language || "English",
                 division: matchedUser.region,
-                district: matchedUser.area
+                district: matchedUser.area,
+                role: matchedUser.role,
               };
             }
           }
@@ -50,7 +60,8 @@ export default function Home() {
             phone: firebaseUser.phoneNumber || "Unknown",
             language: "English",
             division: "Dhaka",
-            district: "Dhaka"
+            district: "Dhaka",
+            role: "operator",
           });
         }
       } else {
@@ -66,8 +77,8 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center font-sans">
         <div className="relative flex flex-col items-center">
-          <div className="w-16 h-16 rounded-full border-4 border-slate-100 border-t-secondary animate-spin"></div>
-          <p className="mt-4 text-sm font-semibold text-heading animate-pulse">
+          <div className="w-14 h-14 rounded-full border-4 border-surface-elevated border-t-primary animate-spin"></div>
+          <p className="mt-4 text-sm font-medium text-muted-custom animate-pulse">
             Verifying secure session...
           </p>
         </div>
